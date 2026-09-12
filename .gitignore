@@ -1,0 +1,25 @@
+# 环境变量，里面存LLM的API KEY！千万不能上传
+.env
+*.env
+
+# python 虚拟环境
+venv/
+.venv/
+env/
+
+# python缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 向量库/本地知识库缓存目录（看你项目里向量库文件夹名字，按需添加）
+chroma_db/
+vector_db/
+
+# 日志
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
