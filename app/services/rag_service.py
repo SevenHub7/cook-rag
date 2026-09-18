@@ -25,6 +25,10 @@ from rag_modules import (
     RetrievalOptimizationModule,
 )
 
+from app.skills.dish_extract import build_rag_search_query, extract_dish_name_from_search_query
+
+from app.schema.chat_schema import ChatMessage
+
 logger = logging.getLogger(__name__)
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -123,28 +127,50 @@ class RAGService:
     def _retrieve(
         self,
         question: str,
+        chat_history: List[ChatMessage],
         category: Optional[str] = None,
         difficulty: Optional[str] = None,
     ):
-        """完整检索链路：路由 -> 重写 -> 过滤检索 -> 取父文档"""
+        """完整检索链路：路由 -> Skill指代改写 -> LLM重写兜底 -> 过滤检索 -> 取父文档"""
         # 1. 查询路由
         route = self.generation_module.query_router(question)
 
-        # 2. 智能查询重写（列表查询保持原样）
+        # 2. 【新增】优先调用Skill处理指代问句（怎么做/要什么食材）
+        skill_rewritten = build_rag_search_query(user_input=question, chat_history=chat_history)
+        logger.info(f"【Skill指代改写】原始question={question}, skill输出={skill_rewritten}, history_len={len(chat_history)}")
+
+        # 2.5 若 skill 改写成功，尝试提取明确菜名，用于检索后精确过滤
+        explicit_dish: Optional[str] = None
+        if skill_rewritten != question:
+            explicit_dish = extract_dish_name_from_search_query(skill_rewritten)
+            if explicit_dish:
+                logger.info(f"【Skill指代改写】提取明确菜名: {explicit_dish}")
+
+        # 3. 智能查询重写（列表查询保持原样）
         if route == "list":
             rewritten = question
         else:
-            rewritten = self.generation_module.query_rewrite(question)
+         # 如果skill改写后的query和原始不一样，优先用skill结果；否则走LLM兜底
+            if skill_rewritten != question:
+                rewritten = skill_rewritten
+            else:
+                rewritten = self.generation_module.query_rewrite(question)
 
-        # 3. 过滤条件 = 自动提取 + 前端显式指定（显式优先）
+        # 4. 过滤条件 = 自动提取 + 前端显式指定（显式优先）
         filters = self._extract_filters(question)
         if category:
             filters["category"] = category
         if difficulty:
             filters["difficulty"] = difficulty
 
-        # 4. 混合检索
-        if filters:
+        # 5. 检索
+        # list 路径（"推荐一些早餐"这种列表式查询）：不按相似度排序，从符合条件的菜品里随机采样，
+        # 避免每个 chunk 都集中到同一道菜上导致反复推荐同一道菜
+        if route == "list":
+            chunks = self.retrieval_module.random_sample_search(
+                rewritten, filters, top_k=settings.top_k
+            )
+        elif filters:
             chunks = self.retrieval_module.metadata_filtered_search(
                 rewritten, filters, top_k=settings.top_k
             )
@@ -153,7 +179,19 @@ class RAGService:
                 rewritten, top_k=settings.top_k
             )
 
-        # 5. 取完整父文档
+        # 5.5 若 skill 已提取明确菜名，只保留该菜名的 chunk（避免同类菜品混入）
+        if explicit_dish and chunks:
+            filtered = [
+                c for c in chunks
+                if c.metadata.get("dish_name") == explicit_dish
+            ]
+            if filtered:
+                logger.info(f"【菜名精确过滤】{explicit_dish}: 原 {len(chunks)} 个 chunk -> 过滤后 {len(filtered)} 个")
+                chunks = filtered
+            else:
+                logger.warning(f"【菜名精确过滤】{explicit_dish} 过滤后为空，回退到混合检索结果")
+
+        # 6. 取完整父文档
         parents = self.data_module.get_parent_documents(chunks) if chunks else []
         return route, rewritten, filters, parents
 
@@ -171,12 +209,13 @@ class RAGService:
     def ask(
         self,
         question: str,
+        chat_history: List[ChatMessage],
         category: Optional[str] = None,
         difficulty: Optional[str] = None,
     ) -> Dict[str, Any]:
         """非流式问答，一次性返回完整回答"""
         route, rewritten, filters, parents = self._retrieve(
-            question, category, difficulty
+            question, chat_history, category, difficulty
         )
 
         if not parents:
@@ -208,6 +247,7 @@ class RAGService:
     def ask_stream(
         self,
         question: str,
+        chat_history: List[ChatMessage],
         category: Optional[str] = None,
         difficulty: Optional[str] = None,
     ) -> Generator[Dict[str, Any], None, None]:
@@ -221,7 +261,7 @@ class RAGService:
         """
         try:
             route, rewritten, filters, parents = self._retrieve(
-                question, category, difficulty
+                question, chat_history, category, difficulty
             )
             yield {
                 "type": "meta",

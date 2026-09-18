@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 from app.services.rag_service import rag_service
+from app.schema.chat_schema import ChatMessage
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -17,7 +18,7 @@ class ChatRequest(BaseModel):
     stream: bool = Field(True, description="true=SSE 流式输出，false=一次性 JSON")
     category: Optional[str] = Field(None, description="前端指定的分类筛选（可选）")
     difficulty: Optional[str] = Field(None, description="前端指定的难度筛选（可选）")
-
+    chat_history: list[ChatMessage] = Field(default=[], description="对话历史")
 
 @router.post("/chat")
 def chat(req: ChatRequest):
@@ -27,7 +28,7 @@ def chat(req: ChatRequest):
     if req.stream:
         def event_generator():
             for evt in rag_service.ask_stream(
-                req.question, req.category, req.difficulty
+                req.question, req.chat_history, req.category, req.difficulty
             ):
                 yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
 
@@ -40,4 +41,4 @@ def chat(req: ChatRequest):
             },
         )
 
-    return rag_service.ask(req.question, req.category, req.difficulty)
+    return rag_service.ask(req.question, req.chat_history, req.category, req.difficulty)

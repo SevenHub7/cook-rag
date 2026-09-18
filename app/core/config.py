@@ -11,6 +11,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # 项目根目录（cook-rag-backend/）
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
+# 指代短句：用户输入这些词时，RAG 检索需要从对话历史里取出最近推荐的菜品名
+# 作为新的检索 query（避免 LLM 在"怎么做？"这种零指代输入上瞎猜）
+SHORT_REFERENCE_QUERIES = {
+    "怎么做？",
+    "做法？",
+    "教程？",
+    "详细步骤？",
+    "怎么做",
+}
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(

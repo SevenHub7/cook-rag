@@ -11,8 +11,17 @@ cook-rag 后端入口
 """
 
 import asyncio
+
 import logging
 from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
+import os
+
+# 获取 main.py 文件的路径，向上一层到项目根目录
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_path = os.path.join(BASE_DIR, ".env")
+load_dotenv(env_path)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,23 +37,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """启动时预热 RAG（加载模型 + 索引），放在线程池里跑不阻塞事件循环"""
-    logger.info("正在预热 RAG 服务（首次约需几十秒）...")
-    await asyncio.to_thread(rag_service.initialize)
-    logger.info("预热完成，服务就绪")
+    """启动时阻塞预热 RAG（加载模型 + 索引），完成后才开始接受请求。"""
+    logger.info("RAG 服务预热开始（首次约需几十秒）...")
+    try:
+        await asyncio.to_thread(rag_service.initialize)
+        logger.info("RAG 服务预热完成，开始监听请求")
+    except Exception:
+        logger.exception("RAG 服务预热失败，启动中止")
+        raise
     yield
-    # 暂无需清理逻辑
 
 
 app = FastAPI(
     title="cook-rag API",
-    description="尝试尝咸淡 RAG 食谱问答后端",
+    description="一日三餐 RAG 食谱问答后端",
     version="2.0.0",
     lifespan=lifespan,
 )
+
 
 # CORS：开发阶段前端 Vite 跑在 5173 端口（虽然 dev proxy 已转发，这里双保险）
 app.add_middleware(
