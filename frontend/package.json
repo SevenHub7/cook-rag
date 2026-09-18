@@ -1,0 +1,20 @@
+{
+  "name": "cook-rag-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "尝尝咸淡 RAG 食谱问答前端（Vue 3 + Vite）",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "marked": "^14.1.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.1.0",
+    "vite": "^5.4.0"
+  }
+}
