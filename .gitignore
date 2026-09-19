@@ -1,25 +1,52 @@
-# 环境变量，里面存LLM的API KEY！千万不能上传
+# ===== 全局敏感信息 =====
+# 环境变量（含 LLM API Key），绝对不能入库
 .env
 *.env
+!.env.example
 
-# python 虚拟环境
-venv/
-.venv/
-env/
-
-# python缓存
+# ===== 后端（Python） =====
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# 向量库/本地知识库缓存目录（看你项目里向量库文件夹名字，按需添加）
-chroma_db/
-vector_db/
+# 虚拟环境
+venv/
+.venv/
+env/
 
-# 日志
+# 临时构建产物
+*.egg-info/
+dist/
+build/
+htmlcov/
+
+# ===== 前端（Node） =====
+node_modules/
+dist/
+.vite/
+
+# ===== 模型缓存 =====
+# 本地缓存的 HuggingFace / sentence-transformers 模型
+models_cache/
+
+# 注意：backend/vector_index/ 里的预构建 FAISS 索引是项目资产，随仓库提交（现状保持）。
+# 如果以后想改成"索引不入库、按需重建"，取消下面三行注释即可：
+# backend/vector_index/*.faiss
+# backend/vector_index/*.index
+# backend/vector_index/*.pkl
+
+# ===== 日志 & 系统 =====
 *.log
+*.out
+*.bak
 
-# 系统文件
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# ===== IDE =====
+.idea/
+.vscode/
+*.swp
+*.swo
